@@ -2,7 +2,7 @@ services:
   brochure:
     build: .
     ports:
-      - "8080:80"
+      - "8085:80"
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1/"]
