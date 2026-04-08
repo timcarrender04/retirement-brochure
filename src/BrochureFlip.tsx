@@ -12,7 +12,7 @@ import HTMLFlipBook from "react-pageflip";
 const PINCH_SCALE_MIN = 1;
 const PINCH_SCALE_MAX = 4;
 
-/** Two-finger pinch scales the book; stops events before page-flip’s window listeners. */
+/** Two-finger pinch zoom + two-finger pan; stops events before page-flip’s window listeners. */
 function useBrochurePinchZoom(wrapRef: RefObject<HTMLDivElement | null>) {
   const scaleRef = useRef(1);
 
@@ -20,7 +20,13 @@ function useBrochurePinchZoom(wrapRef: RefObject<HTMLDivElement | null>) {
     const wrap = wrapRef.current;
     if (!wrap) return;
 
-    type Session = { startDist: number; startScale: number };
+    const panRef = { x: 0, y: 0 };
+
+    type Session = {
+      startDist: number;
+      startScale: number;
+      lastMid: { x: number; y: number };
+    };
     let session: Session | null = null;
 
     const pinchDistance = (e: TouchEvent): number => {
@@ -30,13 +36,27 @@ function useBrochurePinchZoom(wrapRef: RefObject<HTMLDivElement | null>) {
       return Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
     };
 
-    const applyScale = (s: number) => {
-      const clamped = Math.min(
+    const pinchMidpoint = (e: TouchEvent): { x: number; y: number } => {
+      const a = e.touches[0];
+      const b = e.touches[1];
+      return { x: (a.clientX + b.clientX) / 2, y: (a.clientY + b.clientY) / 2 };
+    };
+
+    const clampPan = () => {
+      const s = Math.max(1, scaleRef.current);
+      const maxX = Math.max(120, window.innerWidth * 0.5 * s);
+      const maxY = Math.max(120, window.innerHeight * 0.5 * s);
+      panRef.x = Math.min(maxX, Math.max(-maxX, panRef.x));
+      panRef.y = Math.min(maxY, Math.max(-maxY, panRef.y));
+    };
+
+    const applyTransform = () => {
+      const s = Math.min(
         PINCH_SCALE_MAX,
-        Math.max(PINCH_SCALE_MIN, s)
+        Math.max(PINCH_SCALE_MIN, scaleRef.current)
       );
-      scaleRef.current = clamped;
-      wrap.style.transform = `scale(${clamped})`;
+      scaleRef.current = s;
+      wrap.style.transform = `translate(${panRef.x}px, ${panRef.y}px) scale(${s})`;
     };
 
     const onTouchStart = (e: TouchEvent) => {
@@ -44,7 +64,11 @@ function useBrochurePinchZoom(wrapRef: RefObject<HTMLDivElement | null>) {
         e.stopImmediatePropagation();
         const d = pinchDistance(e);
         if (d > 8) {
-          session = { startDist: d, startScale: scaleRef.current };
+          session = {
+            startDist: d,
+            startScale: scaleRef.current,
+            lastMid: pinchMidpoint(e),
+          };
         }
       }
     };
@@ -55,15 +79,26 @@ function useBrochurePinchZoom(wrapRef: RefObject<HTMLDivElement | null>) {
       const d = pinchDistance(e);
       if (d <= 8) return;
 
+      const mid = pinchMidpoint(e);
+
       if (session === null) {
-        session = { startDist: d, startScale: scaleRef.current };
+        session = {
+          startDist: d,
+          startScale: scaleRef.current,
+          lastMid: mid,
+        };
       }
 
       e.preventDefault();
       e.stopImmediatePropagation();
 
-      const ratio = d / session.startDist;
-      applyScale(session.startScale * ratio);
+      scaleRef.current = session.startScale * (d / session.startDist);
+      panRef.x += mid.x - session.lastMid.x;
+      panRef.y += mid.y - session.lastMid.y;
+      session.lastMid = mid;
+
+      clampPan();
+      applyTransform();
     };
 
     const endPinch = (e: TouchEvent) => {
@@ -77,7 +112,9 @@ function useBrochurePinchZoom(wrapRef: RefObject<HTMLDivElement | null>) {
       e.preventDefault();
       e.stopPropagation();
       const factor = 1 - e.deltaY * 0.01;
-      applyScale(scaleRef.current * factor);
+      scaleRef.current *= factor;
+      clampPan();
+      applyTransform();
     };
 
     wrap.addEventListener("touchstart", onTouchStart, { capture: true });
