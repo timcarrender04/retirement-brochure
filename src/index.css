@@ -72,6 +72,17 @@ body {
   display: flex;
   justify-content: center;
   align-items: center;
+  overflow: visible;
+}
+
+/* Wrapper for CSS scale-based pinch zoom (page-flip steals browser pinch otherwise). */
+.brochure-pinch-zoom {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  transform-origin: center center;
+  will-change: transform;
 }
 
 .brochure-flip-book {

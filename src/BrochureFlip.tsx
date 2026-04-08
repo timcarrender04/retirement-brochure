@@ -1,5 +1,101 @@
-import { forwardRef, useCallback, useEffect, useRef, useState } from "react";
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type RefObject,
+} from "react";
 import HTMLFlipBook from "react-pageflip";
+
+const PINCH_SCALE_MIN = 1;
+const PINCH_SCALE_MAX = 4;
+
+/** Two-finger pinch scales the book; stops events before page-flip’s window listeners. */
+function useBrochurePinchZoom(wrapRef: RefObject<HTMLDivElement | null>) {
+  const scaleRef = useRef(1);
+
+  useLayoutEffect(() => {
+    const wrap = wrapRef.current;
+    if (!wrap) return;
+
+    type Session = { startDist: number; startScale: number };
+    let session: Session | null = null;
+
+    const pinchDistance = (e: TouchEvent): number => {
+      if (e.touches.length < 2) return 0;
+      const a = e.touches[0];
+      const b = e.touches[1];
+      return Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+    };
+
+    const applyScale = (s: number) => {
+      const clamped = Math.min(
+        PINCH_SCALE_MAX,
+        Math.max(PINCH_SCALE_MIN, s)
+      );
+      scaleRef.current = clamped;
+      wrap.style.transform = `scale(${clamped})`;
+    };
+
+    const onTouchStart = (e: TouchEvent) => {
+      if (e.touches.length >= 2) {
+        e.stopImmediatePropagation();
+        const d = pinchDistance(e);
+        if (d > 8) {
+          session = { startDist: d, startScale: scaleRef.current };
+        }
+      }
+    };
+
+    const onTouchMove = (e: TouchEvent) => {
+      if (e.touches.length < 2) return;
+
+      const d = pinchDistance(e);
+      if (d <= 8) return;
+
+      if (session === null) {
+        session = { startDist: d, startScale: scaleRef.current };
+      }
+
+      e.preventDefault();
+      e.stopImmediatePropagation();
+
+      const ratio = d / session.startDist;
+      applyScale(session.startScale * ratio);
+    };
+
+    const endPinch = (e: TouchEvent) => {
+      if (e.touches.length < 2) {
+        session = null;
+      }
+    };
+
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const factor = 1 - e.deltaY * 0.01;
+      applyScale(scaleRef.current * factor);
+    };
+
+    wrap.addEventListener("touchstart", onTouchStart, { capture: true });
+    wrap.addEventListener("touchmove", onTouchMove, { capture: true, passive: false });
+    wrap.addEventListener("touchend", endPinch, { capture: true });
+    wrap.addEventListener("touchcancel", endPinch, { capture: true });
+    wrap.addEventListener("wheel", onWheel, { passive: false });
+
+    return () => {
+      wrap.removeEventListener("touchstart", onTouchStart, { capture: true });
+      wrap.removeEventListener("touchmove", onTouchMove, { capture: true });
+      wrap.removeEventListener("touchend", endPinch, { capture: true });
+      wrap.removeEventListener("touchcancel", endPinch, { capture: true });
+      wrap.removeEventListener("wheel", onWheel);
+      wrap.style.transform = "";
+    };
+  }, [wrapRef]);
+}
 
 const PAGE_SRC = [
   "/images/page01.jpg",
@@ -60,7 +156,9 @@ function useIsMobileLayout() {
 
 export default function BrochureFlip() {
   const containerRef = useRef<HTMLDivElement>(null);
+  const pinchWrapRef = useRef<HTMLDivElement>(null);
   const bookRef = useRef<FlipBookRef>(null);
+  useBrochurePinchZoom(pinchWrapRef);
   const [dims, setDims] = useState({ width: 400, height: 560 });
   const [aspect, setAspect] = useState(3 / 4);
   const isMobile = useIsMobileLayout();
@@ -187,41 +285,43 @@ export default function BrochureFlip() {
   return (
     <div className="brochure-flip-root">
       <div className="brochure-flip-stage" ref={containerRef}>
-        <HTMLFlipBook
-          key={isMobile ? "portrait" : "landscape"}
-          ref={bookRef}
-          className="brochure-flip-book"
-          style={{
-            width: "100%",
-            height: "100%",
-            minHeight: 0,
-          }}
-          width={dims.width}
-          height={dims.height}
-          size="fixed"
-          minWidth={dims.width}
-          maxWidth={dims.width}
-          minHeight={dims.height}
-          maxHeight={dims.height}
-          drawShadow
-          flippingTime={650}
-          startPage={0}
-          usePortrait={isMobile}
-          startZIndex={0}
-          autoSize={false}
-          maxShadowOpacity={0.45}
-          showCover={!isMobile}
-          mobileScrollSupport
-          clickEventForward
-          useMouseEvents
-          swipeDistance={36}
-          showPageCorners
-          disableFlipByClick={false}
-        >
-          {PAGE_SRC.map((src, i) => (
-            <Page key={src} src={src} index={i} />
-          ))}
-        </HTMLFlipBook>
+        <div className="brochure-pinch-zoom" ref={pinchWrapRef}>
+          <HTMLFlipBook
+            key={isMobile ? "portrait" : "landscape"}
+            ref={bookRef}
+            className="brochure-flip-book"
+            style={{
+              width: "100%",
+              height: "100%",
+              minHeight: 0,
+            }}
+            width={dims.width}
+            height={dims.height}
+            size="fixed"
+            minWidth={dims.width}
+            maxWidth={dims.width}
+            minHeight={dims.height}
+            maxHeight={dims.height}
+            drawShadow
+            flippingTime={650}
+            startPage={0}
+            usePortrait={isMobile}
+            startZIndex={0}
+            autoSize={false}
+            maxShadowOpacity={0.45}
+            showCover={!isMobile}
+            mobileScrollSupport
+            clickEventForward
+            useMouseEvents
+            swipeDistance={36}
+            showPageCorners
+            disableFlipByClick={false}
+          >
+            {PAGE_SRC.map((src, i) => (
+              <Page key={src} src={src} index={i} />
+            ))}
+          </HTMLFlipBook>
+        </div>
       </div>
     </div>
   );
