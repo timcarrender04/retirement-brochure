@@ -1,14 +1,10 @@
-# Coolify: expose 80 and 443 so the proxy can reach HTTP and/or HTTPS on the container.
-# Optional — mount real TLS files (e.g. Cloudflare Origin CA) over the image defaults:
-#   volumes:
-#     - /path/fullchain.pem:/etc/nginx/ssl/fullchain.pem:ro
-#     - /path/privkey.pem:/etc/nginx/ssl/privkey.pem:ro
+# Coolify: Traefik handles HTTPS. Container serves plain HTTP on 80 only.
+# In Coolify, set the service port to 80 (not 443).
 services:
   brochure:
     build: .
     expose:
       - "80"
-      - "443"
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1/"]
