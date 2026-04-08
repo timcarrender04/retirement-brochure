@@ -1,0 +1,9 @@
+node_modules
+dist
+.git
+# Built into public/images for the app; skip duplicate top-level copies
+/images
+*.log
+.env
+.env.*
+!.env.example
