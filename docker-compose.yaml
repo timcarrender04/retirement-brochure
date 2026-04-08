@@ -1,10 +1,14 @@
-# Coolify attaches its reverse proxy to the container port — avoid fixed host "ports:"
-# mappings here (they fight Traefik and can cause redirect/connection issues).
+# Coolify: expose 80 and 443 so the proxy can reach HTTP and/or HTTPS on the container.
+# Optional — mount real TLS files (e.g. Cloudflare Origin CA) over the image defaults:
+#   volumes:
+#     - /path/fullchain.pem:/etc/nginx/ssl/fullchain.pem:ro
+#     - /path/privkey.pem:/etc/nginx/ssl/privkey.pem:ro
 services:
   brochure:
     build: .
     expose:
       - "80"
+      - "443"
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1/"]
